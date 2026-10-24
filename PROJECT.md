@@ -38,6 +38,8 @@
 - [x] Transparent Pricing & Checkout flow (`/pricing`)
 - [x] Customer Dashboard & Interactive REST API Playground (`/dashboard`)
 - [x] Command Palette (`Ctrl+K`) & Global Toast Notification System
+- [x] Deploy live on Vercel (https://revatlas-one.vercel.app)
 - [x] Deploy live on Cloudflare Pages (https://revatlas.pages.dev)
+- [x] GitHub Repository (https://github.com/varuoog755-creator/revatlas)
 - [ ] Payments Gateway Integration (Razorpay India / Stripe Global webhook)
 - [ ] Product Hunt + Show HN launch campaign
