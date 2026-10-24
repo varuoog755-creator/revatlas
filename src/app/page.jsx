@@ -1,6 +1,6 @@
 import data from "../data.json";
-import Directory from "../components/Directory";
+import LandingPage from "../components/LandingPage";
 
 export default function Page() {
-  return <Directory data={data} />;
+  return <LandingPage data={data} />;
 }
