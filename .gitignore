@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+/.pnpm-store
+
+# Next.js build
+.next/
+out/
+
+# Archives
+revatlas.zip
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
