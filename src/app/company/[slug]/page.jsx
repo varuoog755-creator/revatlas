@@ -13,9 +13,40 @@ export function generateMetadata({ params }) {
   if (!company) {
     return { title: "Company Not Found — RevAtlas" };
   }
+  const revFormatted =
+    company.revenue >= 1e9
+      ? `$${(company.revenue / 1e9).toFixed(1)}B`
+      : `$${(company.revenue / 1e6).toFixed(1)}M`;
+  const title = `${company.name} Revenue, Valuation & Metrics (${revFormatted} ARR) — RevAtlas`;
+  const description = `Verified SaaS metrics for ${company.name}: ${revFormatted} ARR, +${company.growthRate}% YoY growth, $${(company.valuation / 1e6).toFixed(0)}M valuation, ${company.founder} (Founder), team of ${company.team}. Free to search & export.`;
+  const url = `https://revatlas-one.vercel.app/company/${company.slug}`;
+  const cleanDomain = (company.website || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0];
+  const logo = `https://www.google.com/s2/favicons?domain=${cleanDomain}&sz=128`;
+
   return {
-    title: `${company.name} Revenue, Valuation & Metrics ($${(company.revenue / 1e6).toFixed(1)}M ARR) — RevAtlas`,
-    description: `Detailed SaaS metrics for ${company.name}: $${(company.revenue / 1e6).toFixed(1)}M ARR, ${company.growthRate}% YoY growth, valuation multiple, team size, and founder contacts.`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: "RevAtlas — The Revenue Atlas of SaaS",
+      images: [
+        {
+          url: logo,
+          width: 128,
+          height: 128,
+          alt: `${company.name} logo`,
+        },
+      ],
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+      images: [logo],
+    },
   };
 }
 

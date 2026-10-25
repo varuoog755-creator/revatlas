@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "./Navbar";
 import { showToast } from "./Toast";
+import CompanyLogo from "./CompanyLogo";
 
 function fmtMoney(v) {
   if (v == null) return "–";
@@ -16,6 +17,40 @@ function fmtMoney(v) {
 export default function CompanyProfileView({ company, peers = [] }) {
   const [isSaved, setIsSaved] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  const cleanDomain = (company.website || "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .split("/")[0]
+    .trim();
+
+  const shareText = `Check out ${company.name} verified revenue metrics (${fmtMoney(company.revenue)} ARR) and valuation benchmarks on RevAtlas 🌍`;
+  const shareUrl = typeof window !== "undefined" ? window.location.href : `https://revatlas-one.vercel.app/company/${company.slug}`;
+
+  function copyProfileLink() {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      showToast(`Copied ${company.name} profile link to clipboard!`, "success");
+    }
+  }
+
+  function shareTwitter() {
+    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
+    window.open(url, "_blank", "width=600,height=400");
+  }
+
+  function shareLinkedIn() {
+    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
+    window.open(url, "_blank", "width=600,height=500");
+  }
+
+  function shareWhatsApp() {
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(`${shareText}\n${shareUrl}`)}`;
+    window.open(url, "_blank");
+  }
 
   useEffect(() => {
     try {
@@ -106,9 +141,7 @@ export default function CompanyProfileView({ company, peers = [] }) {
         {/* Company Hero Header */}
         <div className="profile-hero-card">
           <div className="profile-hero-left">
-            <div className="company-logo-avatar">
-              {company.name.charAt(0)}
-            </div>
+            <CompanyLogo website={company.website} name={company.name} size={64} className="profile-logo-main" />
             <div className="company-hero-details">
               <div className="title-row">
                 <h1 className="profile-title">{company.name}</h1>
@@ -120,6 +153,7 @@ export default function CompanyProfileView({ company, peers = [] }) {
                 <span className="category-chip">{company.category}</span>
               </div>
               <p className="profile-bio">{company.description}</p>
+              
               <div className="meta-badges">
                 <span className="meta-item">📍 {company.location}</span>
                 <span className="meta-item">📅 Founded {company.founded}</span>
@@ -134,6 +168,49 @@ export default function CompanyProfileView({ company, peers = [] }) {
                     🌐 {company.website} ↗
                   </a>
                 )}
+              </div>
+
+              {/* Social Media Presence & Company Links */}
+              <div className="profile-social-row">
+                <span className="social-row-label">Social & Web:</span>
+                {company.website && (
+                  <a
+                    href={`https://${company.website}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="social-pill"
+                    title={`Visit ${company.name} Official Website`}
+                  >
+                    🌐 Website ↗
+                  </a>
+                )}
+                <a
+                  href={`https://twitter.com/search?q=${encodeURIComponent(company.name + " " + (cleanDomain || "SaaS"))}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="social-pill"
+                  title={`Find ${company.name} on Twitter / X`}
+                >
+                  𝕏 Twitter
+                </a>
+                <a
+                  href={`https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(company.name)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="social-pill"
+                  title={`View ${company.name} on LinkedIn`}
+                >
+                  in LinkedIn
+                </a>
+                <a
+                  href={`https://www.crunchbase.com/textsearch?q=${encodeURIComponent(company.name)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="social-pill"
+                  title={`View Crunchbase Financials`}
+                >
+                  📊 Crunchbase
+                </a>
               </div>
             </div>
           </div>
@@ -154,6 +231,26 @@ export default function CompanyProfileView({ company, peers = [] }) {
             <button className="btn-secondary btn-full" onClick={downloadLeadCard}>
               📥 Download Lead Card (CSV)
             </button>
+
+            {/* Social Share & Virality Box */}
+            <div className="share-box">
+              <span className="share-box-title">Share Company Profile:</span>
+              <div className="share-buttons-row">
+                <button className="share-btn share-x" onClick={shareTwitter} title="Post on 𝕏">
+                  𝕏 Tweet
+                </button>
+                <button className="share-btn share-in" onClick={shareLinkedIn} title="Share on LinkedIn">
+                  in Post
+                </button>
+                <button className="share-btn share-wa" onClick={shareWhatsApp} title="Send via WhatsApp">
+                  💬 WhatsApp
+                </button>
+                <button className="share-btn share-copy" onClick={copyProfileLink} title="Copy direct link">
+                  {copied ? "✓ Copied!" : "🔗 Copy"}
+                </button>
+              </div>
+            </div>
+
             <Link href="/dashboard?tab=claim" className="claim-link">
               Is this your SaaS? Claim Profile ↗
             </Link>
@@ -275,8 +372,22 @@ export default function CompanyProfileView({ company, peers = [] }) {
                 <span className="leader-name">{company.founder}</span>
                 <span className="leader-role">Founder & Chief Executive Officer</span>
                 <div className="leader-contacts">
-                  <span className="contact-pill">✉ Verified Work Email</span>
-                  <span className="contact-pill">in LinkedIn Profile</span>
+                  <a
+                    href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company.founder + " " + company.name)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="contact-pill contact-pill-active"
+                    title={`Find ${company.founder} on LinkedIn`}
+                  >
+                    in LinkedIn Profile ↗
+                  </a>
+                  <button
+                    className="contact-pill"
+                    onClick={() => showToast(`Verified domain: @${cleanDomain || "company.com"}`, "info")}
+                    title="Verified work email"
+                  >
+                    ✉ Verified Work Email
+                  </button>
                 </div>
               </div>
             </div>
@@ -328,7 +439,7 @@ export default function CompanyProfileView({ company, peers = [] }) {
               {peers.map((peer) => (
                 <div key={peer.slug} className="peer-card">
                   <div className="peer-head">
-                    <div className="peer-avatar">{peer.name.charAt(0)}</div>
+                    <CompanyLogo website={peer.website} name={peer.name} size={36} />
                     <div>
                       <h4 className="peer-name">{peer.name}</h4>
                       <span className="peer-loc">📍 {peer.location}</span>
