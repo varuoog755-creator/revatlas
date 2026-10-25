@@ -28,13 +28,13 @@ function getGradient(name = "") {
 
 export default function CompanyLogo({ website, name = "", size = 48, className = "" }) {
   const domain = getDomain(website);
-  const [sourceIndex, setSourceIndex] = useState(0); // 0: Google S2 (high res), 1: Clearbit, 2: Fallback
+  const [sourceIndex, setSourceIndex] = useState(0); // 0: Google v2 Favicon (128px), 1: DuckDuckGo ICO, 2: Fallback
   const [hasError, setHasError] = useState(false);
 
   const sources = domain
     ? [
-        `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-        `https://logo.clearbit.com/${domain}`,
+        `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`,
+        `https://icons.duckduckgo.com/ip3/${domain}.ico`,
       ]
     : [];
 
