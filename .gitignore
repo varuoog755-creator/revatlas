@@ -20,3 +20,7 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# Scraped raw data dumps
+data/
+
