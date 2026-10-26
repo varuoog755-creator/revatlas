@@ -1,18 +1,5 @@
 import "./globals.css";
 import ToastContainer from "../components/Toast";
-import { Inter, JetBrains_Mono } from "next/font/google";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-  display: "swap",
-});
 
 export const metadata = {
   title: "RevAtlas — The Revenue Atlas of SaaS",
@@ -21,8 +8,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" data-theme="light" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className={inter.className}>
+    <html lang="en" data-theme="light">
+      <body>
         {children}
         <ToastContainer />
       </body>
