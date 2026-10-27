@@ -1,5 +1,6 @@
 import "./globals.css";
 import ToastContainer from "../components/Toast";
+import { AuthProvider } from "../lib/auth";
 
 export const metadata = {
   title: "RevAtlas — The Revenue Atlas of SaaS",
@@ -10,8 +11,10 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" data-theme="light">
       <body>
-        {children}
-        <ToastContainer />
+        <AuthProvider>
+          {children}
+          <ToastContainer />
+        </AuthProvider>
       </body>
     </html>
   );

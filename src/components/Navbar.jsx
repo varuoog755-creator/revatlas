@@ -4,12 +4,15 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import allData from "../data.json";
+import { useAuth } from "../lib/auth";
 
 export default function Navbar({ savedCount = 0 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, signOut } = useAuth();
   const [theme, setTheme] = useState("light");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -124,14 +127,72 @@ export default function Navbar({ savedCount = 0 }) {
               + Claim Profile
             </Link>
 
-            {/* User Pill */}
-            <Link href="/dashboard" className="user-pill">
-              <span className="user-avatar">G</span>
-              <div className="user-info">
-                <span className="user-name">Gourav</span>
-                <span className="user-tier">Pro Member · 88/100 Credits</span>
+            {/* User Pill or Auth Buttons */}
+            {user ? (
+              <div className="user-menu-wrap" style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  className="user-pill"
+                  onClick={() => setUserMenuOpen((v) => !v)}
+                  style={{ cursor: "pointer", background: "none", border: "1px solid var(--border)", textAlign: "left" }}
+                >
+                  <span className="user-avatar">
+                    {user.user_metadata?.full_name
+                      ? user.user_metadata.full_name.charAt(0).toUpperCase()
+                      : user.email
+                      ? user.email.charAt(0).toUpperCase()
+                      : "U"}
+                  </span>
+                  <div className="user-info">
+                    <span className="user-name">
+                      {user.user_metadata?.full_name || user.email?.split("@")[0] || "Member"}
+                    </span>
+                    <span className="user-tier">
+                      {user.user_metadata?.role || "Pro Member"} · 88 Credits
+                    </span>
+                  </div>
+                </button>
+
+                {userMenuOpen && (
+                  <div className="user-dropdown-menu">
+                    <Link
+                      href="/dashboard"
+                      className="dropdown-item"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      📊 Account Dashboard
+                    </Link>
+                    <Link
+                      href="/dashboard?tab=claim"
+                      className="dropdown-item"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      🏢 Claim SaaS Profile
+                    </Link>
+                    <div className="dropdown-divider" />
+                    <button
+                      type="button"
+                      className="dropdown-item text-danger"
+                      onClick={() => {
+                        signOut();
+                        setUserMenuOpen(false);
+                      }}
+                    >
+                      🚪 Sign Out
+                    </button>
+                  </div>
+                )}
               </div>
-            </Link>
+            ) : (
+              <div className="nav-auth-buttons">
+                <Link href="/login" className="nav-btn-login">
+                  Log In
+                </Link>
+                <Link href="/signup" className="btn-primary btn-sm">
+                  Sign Up Free
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </header>
