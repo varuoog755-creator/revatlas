@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "./Navbar";
+import CompanyLogo from "./CompanyLogo";
 import { showToast } from "./Toast";
+import { useAuth } from "../lib/auth";
 
 function fmtMoney(v) {
   if (v == null) return "–";
@@ -14,13 +16,42 @@ function fmtMoney(v) {
 }
 
 export default function CustomerDashboard({ initialData = [] }) {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("saved");
   const [savedIds, setSavedIds] = useState([]);
+  const [searchFilter, setSearchFilter] = useState("");
+  const [apiKeyRevealed, setApiKeyRevealed] = useState(false);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+
+  // Export History State
   const [exportHistory, setExportHistory] = useState([
-    { id: 1, date: "24 Oct 2026, 14:35", name: "US-SaaS-$1M-plus.csv", rows: 45, filter: "Rev > $1M, US Only" },
-    { id: 2, date: "23 Oct 2026, 19:10", name: "Funded-Seed-SaaS.csv", rows: 88, filter: "Funded only, Founded 2020+" },
-    { id: 3, date: "22 Oct 2026, 11:05", name: "AI-Workflow-Leads.csv", rows: 32, filter: "AI & Automation" },
+    {
+      id: 1,
+      date: "27 Oct 2026, 09:15",
+      name: "Top-ARR-Enterprise-SaaS.csv",
+      rows: 50,
+      filter: "ARR > $10M, Global",
+      size: "24.5 KB",
+    },
+    {
+      id: 2,
+      date: "25 Oct 2026, 14:35",
+      name: "US-SaaS-$1M-plus.csv",
+      rows: 45,
+      filter: "Rev > $1M, US Only",
+      size: "18.2 KB",
+    },
+    {
+      id: 3,
+      date: "24 Oct 2026, 19:10",
+      name: "Funded-Seed-SaaS.csv",
+      rows: 88,
+      filter: "Funded only, Founded 2020+",
+      size: "36.8 KB",
+    },
   ]);
+
+  // Claim Form State
   const [claimForm, setClaimForm] = useState({
     name: "",
     website: "",
@@ -30,17 +61,24 @@ export default function CustomerDashboard({ initialData = [] }) {
     founderEmail: "",
     note: "",
   });
-  const [claimStatus, setClaimStatus] = useState("");
-  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [claimSubmitting, setClaimSubmitting] = useState(false);
 
-  // API Playground State
-  const [apiEndpoint, setApiEndpoint] = useState("/v1/companies?limit=3");
+  // Live API Playground State
+  const [apiEndpoint, setApiEndpoint] = useState("/api/companies?limit=3");
   const [apiResponse, setApiResponse] = useState(null);
   const [apiLoading, setApiLoading] = useState(false);
+  const [apiLatency, setApiLatency] = useState(null);
 
-  // Webhook State
+  // Webhooks State
   const [webhookUrl, setWebhookUrl] = useState("https://api.yourcrm.com/webhooks/revatlas");
   const [webhookStatus, setWebhookStatus] = useState("");
+  const [webhookTesting, setWebhookTesting] = useState(false);
+  const [webhookEvents, setWebhookEvents] = useState({
+    milestone: true,
+    funding: true,
+    executive: false,
+    multiple: true,
+  });
 
   // Load saved companies from localStorage
   useEffect(() => {
@@ -56,7 +94,7 @@ export default function CustomerDashboard({ initialData = [] }) {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("tab");
-      if (tabParam && ["saved", "exports", "claim", "api", "webhooks", "billing"].includes(tabParam)) {
+      if (tabParam && ["saved", "exports", "api", "webhooks", "claim", "billing"].includes(tabParam)) {
         setActiveTab(tabParam);
       }
     }
@@ -66,6 +104,17 @@ export default function CustomerDashboard({ initialData = [] }) {
     savedIds.includes(item.slug || item.website || item.name)
   );
 
+  const filteredSaved = savedCompanies.filter((c) => {
+    if (!searchFilter.trim()) return true;
+    const q = searchFilter.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(q) ||
+      c.category.toLowerCase().includes(q) ||
+      (c.founder && c.founder.toLowerCase().includes(q)) ||
+      (c.location && c.location.toLowerCase().includes(q))
+    );
+  });
+
   function removeSaved(id) {
     const next = savedIds.filter((item) => item !== id);
     setSavedIds(next);
@@ -73,300 +122,510 @@ export default function CustomerDashboard({ initialData = [] }) {
     showToast("Removed from watchlist", "info");
   }
 
+  function addQuickSample(company) {
+    const key = company.slug || company.website || company.name;
+    if (!savedIds.includes(key)) {
+      const next = [...savedIds, key];
+      setSavedIds(next);
+      localStorage.setItem("revatlas_saved_companies", JSON.stringify(next));
+      showToast(`Added ${company.name} to your watchlist!`, "success");
+    }
+  }
+
   function exportSavedCSV() {
     if (savedCompanies.length === 0) return;
-    const header = ["Name", "Website", "Revenue", "Valuation", "GrowthRate", "Category", "Funding", "Founder", "Team", "Location"];
+    const header = [
+      "Company Name",
+      "Website",
+      "ARR (Annual)",
+      "MRR (Monthly)",
+      "Valuation",
+      "Multiple",
+      "Growth Rate",
+      "Category",
+      "Funding",
+      "Founder",
+      "Team Size",
+      "Location",
+      "Tech Stack",
+    ];
     const lines = [header.join(",")];
     for (const r of savedCompanies) {
       lines.push(
-        [r.name, r.website, r.revenue ?? "", r.valuation ?? "", `${r.growthRate}%`, r.category, r.funding ?? "", r.founder ?? "", r.team ?? "", r.location ?? ""]
+        [
+          r.name,
+          r.website,
+          r.revenue ?? "",
+          r.mrr ?? "",
+          r.valuation ?? "",
+          `${r.multiple || 7.5}x`,
+          `${r.growthRate}%`,
+          r.category,
+          r.funding ?? "",
+          r.founder ?? "",
+          r.team ?? "",
+          r.location ?? "",
+          (r.techStack || []).join(" | "),
+        ]
           .map((v) => `"${String(v).replace(/"/g, '""')}"`)
           .join(",")
       );
     }
-    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `watchlist-leads-${savedCompanies.length}.csv`;
+    a.download = `revatlas-watchlist-leads-${savedCompanies.length}.csv`;
     a.click();
 
     const newEntry = {
       id: Date.now(),
       date: new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
-      name: `watchlist-leads-${savedCompanies.length}.csv`,
+      name: `revatlas-watchlist-leads-${savedCompanies.length}.csv`,
       rows: savedCompanies.length,
-      filter: "Saved Watchlist",
+      filter: "Custom Saved Watchlist",
+      size: `${(blob.size / 1024).toFixed(1)} KB`,
     };
     setExportHistory((prev) => [newEntry, ...prev]);
-    showToast(`Exported ${savedCompanies.length} leads to CSV!`, "success");
+    showToast(`Exported ${savedCompanies.length} company leads to CSV!`, "success");
+  }
+
+  function copyApiKey() {
+    navigator.clipboard?.writeText("rev_live_948f2b79a103c847e928b");
+    setApiKeyCopied(true);
+    showToast("Live API Secret Key copied to clipboard!", "success");
+    setTimeout(() => setApiKeyCopied(false), 2500);
+  }
+
+  async function runApiPlayground() {
+    setApiLoading(true);
+    const start = performance.now();
+    try {
+      const res = await fetch(apiEndpoint);
+      const data = await res.json();
+      const end = performance.now();
+      setApiLatency(Math.round(end - start));
+      setApiResponse(data);
+      showToast(`HTTP ${res.status} OK — Received in ${Math.round(end - start)}ms`, "success");
+    } catch (err) {
+      const end = performance.now();
+      setApiLatency(Math.round(end - start));
+      setApiResponse({
+        error: "Failed to fetch from endpoint",
+        message: err.message,
+      });
+      showToast("API request error", "error");
+    } finally {
+      setApiLoading(false);
+    }
   }
 
   function handleClaimSubmit(e) {
     e.preventDefault();
     if (!claimForm.name || !claimForm.website) return;
-    setClaimStatus("Submitting...");
+    setClaimSubmitting(true);
     setTimeout(() => {
-      setClaimStatus("Success! Your SaaS submission is under review by RevAtlas audit team.");
+      setClaimSubmitting(false);
       setClaimForm({ name: "", website: "", arr: "", team: "", funding: "", founderEmail: "", note: "" });
-      showToast("Company profile submitted for verification!", "success");
-    }, 600);
-  }
-
-  function copyApiKey() {
-    navigator.clipboard?.writeText("rev_live_948f2b79a103c847e92");
-    setApiKeyCopied(true);
-    showToast("API Secret Key copied to clipboard!", "success");
-    setTimeout(() => setApiKeyCopied(false), 2000);
-  }
-
-  function runApiPlayground() {
-    setApiLoading(true);
-    setTimeout(() => {
-      setApiLoading(false);
-      let res;
-      if (apiEndpoint.includes("limit=3")) {
-        res = {
-          status: 200,
-          total_results: initialData.length,
-          data: initialData.slice(0, 3).map((c) => ({
-            name: c.name,
-            website: c.website,
-            arr: c.revenue,
-            mrr: c.mrr,
-            valuation: c.valuation,
-            category: c.category,
-            founder: c.founder,
-          })),
-        };
-      } else {
-        const item = initialData[0];
-        res = {
-          status: 200,
-          data: {
-            name: item.name,
-            website: item.website,
-            arr: item.revenue,
-            valuation: item.valuation,
-            growth_rate_yoy: `${item.growthRate}%`,
-            tech_stack: item.techStack,
-            founder: item.founder,
-          },
-        };
-      }
-      setApiResponse(res);
-      showToast("HTTP 200 OK — API Response Received", "success");
-    }, 450);
+      showToast("Verification request submitted! Our audit team will review your domain within 24 hours.", "success");
+    }, 800);
   }
 
   function testWebhook() {
-    setWebhookStatus("Sending test event to " + webhookUrl + "...");
+    setWebhookTesting(true);
+    setWebhookStatus("");
     setTimeout(() => {
-      setWebhookStatus("✓ Webhook delivered successfully! (HTTP 200 response from endpoint)");
-      showToast("Test webhook ping delivered!", "success");
-    }, 800);
+      setWebhookTesting(false);
+      setWebhookStatus("✓ 200 OK — Test webhook payload successfully delivered to endpoint!");
+      showToast("Webhook test ping delivered successfully!", "success");
+    }, 700);
   }
+
+  const sampleCompanies = initialData.slice(0, 4);
+
+  const userName =
+    user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Gourav";
 
   return (
     <div className="app-shell">
       <Navbar savedCount={savedIds.length} />
 
-      <main className="dashboard-container">
-        {/* Customer Header */}
-        <div className="dash-hero">
-          <div className="dash-hero-content">
-            <div className="badge-pill">Customer Portal</div>
-            <h1>Lead Intelligence & API Workspace</h1>
-            <p className="sub-text">
-              Track prospect watchlists, manage export quotas, test programmatic REST API calls, and configure automated revenue alert webhooks.
-            </p>
+      <main className="dash-v2-main">
+        <div className="dash-v2-container">
+          {/* Top Banner Ribbon */}
+          <div className="dash-v2-hero">
+            <div className="dash-v2-hero-info">
+              <div className="dash-v2-pill-row">
+                <span className="dash-live-badge">
+                  <span className="live-dot" /> LIVE WORKSPACE
+                </span>
+                <span className="dash-role-badge">
+                  {user?.user_metadata?.role || "Founder / Pro Tier"}
+                </span>
+                <span className="dash-credit-badge">⚡ 88 / 100 Credits Left</span>
+              </div>
+              <h1 className="dash-v2-title">
+                Welcome back, {userName}
+              </h1>
+              <p className="dash-v2-subtitle">
+                Manage your saved SaaS targets, export verified outbound lists, run programmatic REST API queries, and track real-time revenue events.
+              </p>
+            </div>
+
+            <div className="dash-v2-hero-card">
+              <div className="hero-quota-header">
+                <span className="quota-title">Monthly Lead Quota</span>
+                <span className="quota-plan">Pro Tier ($29/mo)</span>
+              </div>
+
+              <div className="hero-quota-bar-wrap">
+                <div className="quota-bar-labels">
+                  <span>Export Credits Used</span>
+                  <strong>12 / 100 (88 remaining)</strong>
+                </div>
+                <div className="quota-progress-track">
+                  <div className="quota-progress-fill" style={{ width: "12%" }} />
+                </div>
+              </div>
+
+              <div className="hero-quota-footer">
+                <span className="quota-refresh">Resets on Nov 1, 2026</span>
+                <button
+                  type="button"
+                  className="btn-link-action"
+                  onClick={() => setActiveTab("billing")}
+                >
+                  Manage Plan & Invoices ↗
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="plan-card">
-            <div className="plan-header">
-              <span className="plan-badge">⚡ Pro Member Tier</span>
-              <span className="plan-price">$29/mo</span>
-            </div>
-            <div className="plan-progress">
-              <div className="progress-labels">
-                <span>Monthly Export Credits</span>
-                <b>12 / Unlimited (Pro)</b>
+
+          {/* KPI Metrics Cards */}
+          <section className="dash-kpi-row">
+            <div
+              className={`dash-kpi-card ${activeTab === "saved" ? "active" : ""}`}
+              onClick={() => setActiveTab("saved")}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="kpi-top">
+                <span className="kpi-icon-wrap">📌</span>
+                <span className="kpi-chip positive">+4 new</span>
               </div>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: "25%" }}></div>
-              </div>
+              <div className="kpi-big-num">{savedCompanies.length}</div>
+              <div className="kpi-title">Saved Watchlist Leads</div>
+              <div className="kpi-meta">High-intent targets for outreach</div>
             </div>
-            <button className="btn-secondary btn-full btn-sm" onClick={() => setActiveTab("billing")}>
-              Manage Billing & Invoices
+
+            <div
+              className={`dash-kpi-card ${activeTab === "exports" ? "active" : ""}`}
+              onClick={() => setActiveTab("exports")}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="kpi-top">
+                <span className="kpi-icon-wrap">📥</span>
+                <span className="kpi-chip neutral">CSV UTF-8</span>
+              </div>
+              <div className="kpi-big-num">{exportHistory.length} Batches</div>
+              <div className="kpi-title">Export Activity</div>
+              <div className="kpi-meta">183 total leads downloaded</div>
+            </div>
+
+            <div
+              className={`dash-kpi-card ${activeTab === "api" ? "active" : ""}`}
+              onClick={() => setActiveTab("api")}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="kpi-top">
+                <span className="kpi-icon-wrap">⚡</span>
+                <span className="kpi-chip positive">99.98% SLA</span>
+              </div>
+              <div className="kpi-big-num">42 / 10K</div>
+              <div className="kpi-title">Daily REST API Calls</div>
+              <div className="kpi-meta">Fast low-latency JSON endpoints</div>
+            </div>
+
+            <div
+              className={`dash-kpi-card ${activeTab === "webhooks" ? "active" : ""}`}
+              onClick={() => setActiveTab("webhooks")}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="kpi-top">
+                <span className="kpi-icon-wrap">🔔</span>
+                <span className="kpi-chip positive">Active</span>
+              </div>
+              <div className="kpi-big-num">3 Events</div>
+              <div className="kpi-title">Real-Time Webhooks</div>
+              <div className="kpi-meta">Automated revenue alert pings</div>
+            </div>
+          </section>
+
+          {/* Navigation Tab Bar */}
+          <div className="dash-nav-tabs">
+            <button
+              type="button"
+              className={`dash-nav-btn ${activeTab === "saved" ? "active" : ""}`}
+              onClick={() => setActiveTab("saved")}
+            >
+              <span className="dash-tab-icon">📌</span>
+              <span>Watchlist</span>
+              <span className="dash-tab-count">{savedCompanies.length}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`dash-nav-btn ${activeTab === "exports" ? "active" : ""}`}
+              onClick={() => setActiveTab("exports")}
+            >
+              <span className="dash-tab-icon">📥</span>
+              <span>Export History</span>
+              <span className="dash-tab-count">{exportHistory.length}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`dash-nav-btn ${activeTab === "api" ? "active" : ""}`}
+              onClick={() => setActiveTab("api")}
+            >
+              <span className="dash-tab-icon">🔑</span>
+              <span>API Playground & Keys</span>
+            </button>
+
+            <button
+              type="button"
+              className={`dash-nav-btn ${activeTab === "webhooks" ? "active" : ""}`}
+              onClick={() => setActiveTab("webhooks")}
+            >
+              <span className="dash-tab-icon">🔔</span>
+              <span>Webhooks & Alerts</span>
+            </button>
+
+            <button
+              type="button"
+              className={`dash-nav-btn ${activeTab === "claim" ? "active" : ""}`}
+              onClick={() => setActiveTab("claim")}
+            >
+              <span className="dash-tab-icon">🏢</span>
+              <span>Claim SaaS Profile</span>
+            </button>
+
+            <button
+              type="button"
+              className={`dash-nav-btn ${activeTab === "billing" ? "active" : ""}`}
+              onClick={() => setActiveTab("billing")}
+            >
+              <span className="dash-tab-icon">💳</span>
+              <span>Billing & Plan</span>
             </button>
           </div>
-        </div>
 
-        {/* Quick Stat Tiles */}
-        <section className="kpi-grid">
-          <div className="kpi-tile" onClick={() => setActiveTab("saved")} role="button" tabIndex={0}>
-            <div className="kpi-header">
-              <span className="kpi-icon">📌</span>
-              <span className="kpi-tag">Watchlist</span>
-            </div>
-            <div className="kpi-value">{savedCompanies.length}</div>
-            <div className="kpi-desc">Saved SaaS Leads for outreach</div>
-          </div>
+          {/* TAB 1: SAVED WATCHLIST */}
+          {activeTab === "saved" && (
+            <div className="dash-tab-content">
+              <div className="dash-section-header">
+                <div>
+                  <h2 className="dash-section-title">Saved SaaS Target Watchlist</h2>
+                  <p className="dash-section-sub">
+                    Bookmarked companies from the RevAtlas 72,000+ directory. Filter, compare metrics, and export clean CSV dossiers.
+                  </p>
+                </div>
 
-          <div className="kpi-tile" onClick={() => setActiveTab("exports")} role="button" tabIndex={0}>
-            <div className="kpi-header">
-              <span className="kpi-icon">📥</span>
-              <span className="kpi-tag">Activity</span>
-            </div>
-            <div className="kpi-value">{exportHistory.length}</div>
-            <div className="kpi-desc">Total CSV Export Batches</div>
-          </div>
-
-          <div className="kpi-tile" onClick={() => setActiveTab("api")} role="button" tabIndex={0}>
-            <div className="kpi-header">
-              <span className="kpi-icon">⚡</span>
-              <span className="kpi-tag">Live API</span>
-            </div>
-            <div className="kpi-value">42 / 10,000</div>
-            <div className="kpi-desc">Daily API requests used</div>
-          </div>
-
-          <div className="kpi-tile" onClick={() => setActiveTab("webhooks")} role="button" tabIndex={0}>
-            <div className="kpi-header">
-              <span className="kpi-icon">🔔</span>
-              <span className="kpi-tag">Webhooks</span>
-            </div>
-            <div className="kpi-value">Active</div>
-            <div className="kpi-desc">Real-time revenue event stream</div>
-          </div>
-        </section>
-
-        {/* Navigation Tabs */}
-        <div className="dash-tabs">
-          <button
-            className={`tab-btn ${activeTab === "saved" ? "active" : ""}`}
-            onClick={() => setActiveTab("saved")}
-          >
-            📌 Saved Watchlist ({savedCompanies.length})
-          </button>
-          <button
-            className={`tab-btn ${activeTab === "exports" ? "active" : ""}`}
-            onClick={() => setActiveTab("exports")}
-          >
-            📥 Export History
-          </button>
-          <button
-            className={`tab-btn ${activeTab === "api" ? "active" : ""}`}
-            onClick={() => setActiveTab("api")}
-          >
-            🔑 API Playground & Keys
-          </button>
-          <button
-            className={`tab-btn ${activeTab === "webhooks" ? "active" : ""}`}
-            onClick={() => setActiveTab("webhooks")}
-          >
-            🔔 Webhooks & Alerts
-          </button>
-          <button
-            className={`tab-btn ${activeTab === "claim" ? "active" : ""}`}
-            onClick={() => setActiveTab("claim")}
-          >
-            🏢 Claim / Submit SaaS
-          </button>
-          <button
-            className={`tab-btn ${activeTab === "billing" ? "active" : ""}`}
-            onClick={() => setActiveTab("billing")}
-          >
-            💳 Billing & Plan
-          </button>
-        </div>
-
-        {/* Tab 1: Saved Leads */}
-        {activeTab === "saved" && (
-          <div className="tab-pane">
-            <div className="pane-header">
-              <div>
-                <h2>Your Saved SaaS Companies</h2>
-                <p className="pane-sub">
-                  Bookmarked prospects from the RevAtlas directory. Ready for cold email or partnership outreach.
-                </p>
-              </div>
-              {savedCompanies.length > 0 && (
-                <div className="btn-group">
-                  <button className="btn-primary" onClick={exportSavedCSV}>
-                    ⬇ Export Watchlist (CSV)
-                  </button>
-                  {savedCompanies.length >= 2 && (
-                    <Link
-                      href={`/compare?comp1=${savedCompanies[0].slug}&comp2=${savedCompanies[1].slug}`}
-                      className="btn-secondary"
+                {savedCompanies.length > 0 && (
+                  <div className="dash-header-actions">
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={exportSavedCSV}
                     >
-                      ⚖ Compare Top 2
-                    </Link>
-                  )}
+                      ⬇ Export Watchlist CSV ({savedCompanies.length})
+                    </button>
+                    {savedCompanies.length >= 2 && (
+                      <Link
+                        href={`/compare?comp1=${savedCompanies[0].slug}&comp2=${savedCompanies[1].slug}`}
+                        className="btn-secondary"
+                      >
+                        ⚖ Compare Top 2
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {savedCompanies.length === 0 ? (
+                <div className="dash-empty-state">
+                  <div className="empty-state-icon">📂</div>
+                  <h3 className="empty-state-title">Your Watchlist is Currently Empty</h3>
+                  <p className="empty-state-desc">
+                    Bookmark companies across the RevAtlas directory to monitor their ARR trajectories, EV/ARR multiples, and verified executive contacts.
+                  </p>
+
+                  <div className="empty-recommend-block">
+                    <div className="empty-recommend-label">
+                      ⚡ Quick Add Recommended SaaS to Watchlist:
+                    </div>
+                    <div className="empty-quick-add-grid">
+                      {sampleCompanies.map((c) => (
+                        <div key={c.slug} className="quick-add-card">
+                          <div className="quick-add-info">
+                            <CompanyLogo website={c.website} name={c.name} size={32} />
+                            <div>
+                              <strong className="quick-add-name">{c.name}</strong>
+                              <span className="quick-add-rev">{fmtMoney(c.revenue)} ARR</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-quick-add"
+                            onClick={() => addQuickSample(c)}
+                          >
+                            + Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Link href="/" className="btn-primary empty-browse-btn">
+                    🌍 Explore 72,000+ Verified SaaS Directory →
+                  </Link>
+                </div>
+              ) : (
+                <div className="dash-table-wrap">
+                  <div className="dash-table-toolbar">
+                    <input
+                      type="text"
+                      className="dash-filter-input"
+                      placeholder="Search saved companies by name, sector, or founder..."
+                      value={searchFilter}
+                      onChange={(e) => setSearchFilter(e.target.value)}
+                    />
+                    <span className="dash-table-counter">
+                      Showing <b>{filteredSaved.length}</b> of <b>{savedCompanies.length}</b> saved leads
+                    </span>
+                  </div>
+
+                  <table className="dash-clean-table">
+                    <thead>
+                      <tr>
+                        <th>Company</th>
+                        <th>Sector</th>
+                        <th>ARR (Annual)</th>
+                        <th>Valuation</th>
+                        <th>Multiple</th>
+                        <th>Growth YoY</th>
+                        <th>Founder</th>
+                        <th>Location</th>
+                        <th style={{ textAlign: "right" }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSaved.map((c) => (
+                        <tr key={c.slug || c.website || c.name}>
+                          <td>
+                            <div className="table-company-cell">
+                              <CompanyLogo website={c.website} name={c.name} size={36} />
+                              <div className="table-company-meta">
+                                <Link href={`/company/${c.slug}`} className="table-company-name">
+                                  {c.name} <span className="arrow-chip">↗</span>
+                                </Link>
+                                <span className="table-company-domain">{c.website}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="badge-sector">{c.category}</span>
+                          </td>
+                          <td>
+                            <span className="badge-revenue">{fmtMoney(c.revenue)}</span>
+                          </td>
+                          <td className="table-val-cell">{fmtMoney(c.valuation)}</td>
+                          <td>
+                            <span className="badge-multiple">{c.multiple || 7.5}x</span>
+                          </td>
+                          <td className="table-growth-cell">+{c.growthRate}%</td>
+                          <td className="table-founder-cell">{c.founder || "Executive Team"}</td>
+                          <td className="table-loc-cell">{c.location || "United States"}</td>
+                          <td style={{ textAlign: "right" }}>
+                            <div className="table-actions-cell">
+                              <Link
+                                href={`/compare?comp1=${c.slug}`}
+                                className="action-pill compare"
+                                title="Compare with peers"
+                              >
+                                ⚖ Compare
+                              </Link>
+                              <button
+                                type="button"
+                                className="action-pill remove"
+                                onClick={() => removeSaved(c.slug || c.website || c.name)}
+                                title="Remove from watchlist"
+                              >
+                                ✕ Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
+          )}
 
-            {savedCompanies.length === 0 ? (
-              <div className="empty-box">
-                <div className="empty-icon">📂</div>
-                <h3>Your watchlist is empty</h3>
-                <p>
-                  Browse the SaaS Atlas directory and click the <b>Bookmark (☆)</b> icon on any company row to save it here.
-                </p>
-                <Link href="/" className="btn-primary">
-                  Browse 72,000+ SaaS Directory
-                </Link>
+          {/* TAB 2: EXPORT HISTORY */}
+          {activeTab === "exports" && (
+            <div className="dash-tab-content">
+              <div className="dash-section-header">
+                <div>
+                  <h2 className="dash-section-title">CSV Lead Export History</h2>
+                  <p className="dash-section-sub">
+                    View and re-download previously exported company lists. All exports include full contact and financial attributes.
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="table-card">
-                <table className="clean-table">
+
+              <div className="dash-table-wrap">
+                <table className="dash-clean-table">
                   <thead>
                     <tr>
-                      <th>Company</th>
-                      <th>Category</th>
-                      <th>ARR (Revenue)</th>
-                      <th>Valuation</th>
-                      <th>Team</th>
-                      <th>Founder</th>
-                      <th>Location</th>
-                      <th style={{ textAlign: "right" }}>Actions</th>
+                      <th>Filename</th>
+                      <th>Date Exported</th>
+                      <th>Records</th>
+                      <th>Filter Criteria</th>
+                      <th>File Size</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: "right" }}>Download</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {savedCompanies.map((c) => (
-                      <tr key={c.slug || c.website || c.name}>
+                    {exportHistory.map((item) => (
+                      <tr key={item.id}>
                         <td>
-                          <div className="company-title-cell">
-                            <Link href={`/company/${c.slug}`} className="cname-link">
-                              <b>{c.name}</b> ↗
-                            </Link>
-                            {c.website && (
-                              <a
-                                href={`https://${c.website}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="external-link"
-                              >
-                                {c.website}
-                              </a>
-                            )}
+                          <div className="file-name-cell">
+                            <span className="file-icon">📄</span>
+                            <strong>{item.name}</strong>
                           </div>
                         </td>
-                        <td><span className="pill-neutral">{c.category}</span></td>
+                        <td className="table-loc-cell">{item.date}</td>
                         <td>
-                          <span className="rev-badge">{fmtMoney(c.revenue)}</span>
+                          <span className="badge-sector">{item.rows} leads</span>
                         </td>
-                        <td>{fmtMoney(c.valuation)}</td>
-                        <td>{c.team ? `${c.team} people` : "–"}</td>
-                        <td>{c.founder || "–"}</td>
-                        <td>{c.location || "–"}</td>
+                        <td className="table-filter-cell">{item.filter}</td>
+                        <td className="table-loc-cell">{item.size || "22 KB"}</td>
+                        <td>
+                          <span className="badge-status-ok">✓ Ready</span>
+                        </td>
                         <td style={{ textAlign: "right" }}>
                           <button
-                            className="btn-text-danger"
-                            onClick={() => removeSaved(c.slug || c.website || c.name)}
-                            title="Remove from watchlist"
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={() => showToast(`Re-downloading ${item.name}...`, "success")}
                           >
-                            Remove
+                            ⬇ Download
                           </button>
                         </td>
                       </tr>
@@ -374,303 +633,416 @@ export default function CustomerDashboard({ initialData = [] }) {
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab 2: Export History */}
-        {activeTab === "exports" && (
-          <div className="tab-pane">
-            <div className="pane-header">
-              <div>
-                <h2>CSV Lead Export History</h2>
-                <p className="pane-sub">
-                  Past CSV lead lists generated from RevAtlas. Re-download any past dataset snapshot.
-                </p>
-              </div>
             </div>
+          )}
 
-            <div className="table-card">
-              <table className="clean-table">
-                <thead>
-                  <tr>
-                    <th>Filename</th>
-                    <th>Date & Time</th>
-                    <th>Records</th>
-                    <th>Filter Applied</th>
-                    <th>Format</th>
-                    <th style={{ textAlign: "right" }}>Download</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {exportHistory.map((item) => (
-                    <tr key={item.id}>
-                      <td><b>{item.name}</b></td>
-                      <td>{item.date}</td>
-                      <td><span className="pill-neutral">{item.rows} leads</span></td>
-                      <td>{item.filter}</td>
-                      <td>CSV (UTF-8)</td>
-                      <td style={{ textAlign: "right" }}>
-                        <button
-                          className="btn-secondary btn-sm"
-                          onClick={() => showToast(`Re-downloading ${item.name}...`, "success")}
-                        >
-                          ⬇ Download
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 3: API Playground & Keys */}
-        {activeTab === "api" && (
-          <div className="tab-pane">
-            <div className="pane-header">
-              <div>
-                <h2>Programmatic REST API & Live Playground</h2>
-                <p className="pane-sub">
-                  Query verified revenue, founder contacts, and company metrics directly inside your applications.
-                </p>
-              </div>
-            </div>
-
-            <div className="api-card">
-              <div className="api-key-block">
+          {/* TAB 3: API PLAYGROUND & KEYS */}
+          {activeTab === "api" && (
+            <div className="dash-tab-content">
+              <div className="dash-section-header">
                 <div>
-                  <div className="label-sm">Active API Secret Key (Bearer Auth)</div>
-                  <code className="api-code">rev_live_948f2b79a103c847e92</code>
+                  <h2 className="dash-section-title">Programmatic REST API & Live Playground</h2>
+                  <p className="dash-section-sub">
+                    Direct access to the 72,000+ verified SaaS database with low latency JSON endpoints.
+                  </p>
                 </div>
-                <button className="btn-secondary btn-sm" onClick={copyApiKey}>
-                  {apiKeyCopied ? "✓ Copied!" : "Copy Key"}
-                </button>
               </div>
 
-              {/* Interactive Live Playground */}
-              <div className="api-playground-box">
-                <div className="panel-head">
-                  <h3>Interactive API Request Builder</h3>
-                  <span className="badge-pill">Test Console</span>
+              {/* API Key Box */}
+              <div className="api-key-card">
+                <div className="api-key-header">
+                  <div>
+                    <strong className="api-key-label">Production API Secret Key</strong>
+                    <p className="api-key-desc">Use this Bearer token in your HTTP Authorization header.</p>
+                  </div>
+                  <div className="api-key-actions">
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      onClick={() => setApiKeyRevealed((v) => !v)}
+                    >
+                      {apiKeyRevealed ? "Hide Key" : "Reveal Key"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      onClick={copyApiKey}
+                    >
+                      {apiKeyCopied ? "✓ Copied!" : "Copy Key"}
+                    </button>
+                  </div>
                 </div>
-                <div className="playground-bar">
-                  <span className="http-method">GET</span>
+                <div className="api-key-display">
+                  <code>
+                    {apiKeyRevealed
+                      ? "rev_live_948f2b79a103c847e928b"
+                      : "rev_live_•••••••••••••••••••••"}
+                  </code>
+                  <span className="badge-scope">Permissions: read:companies, export:csv</span>
+                </div>
+              </div>
+
+              {/* Interactive Playground Box */}
+              <div className="playground-card">
+                <div className="playground-header">
+                  <span className="playground-title">Live API Test Runner</span>
+                  <div className="preset-buttons">
+                    <span className="preset-label">Presets:</span>
+                    <button
+                      type="button"
+                      className="preset-pill"
+                      onClick={() => setApiEndpoint("/api/companies?limit=3")}
+                    >
+                      Top ARR (3)
+                    </button>
+                    <button
+                      type="button"
+                      className="preset-pill"
+                      onClick={() => setApiEndpoint("/api/companies?category=AI+%26+Automation&limit=3")}
+                    >
+                      AI Sector
+                    </button>
+                    <button
+                      type="button"
+                      className="preset-pill"
+                      onClick={() => setApiEndpoint("/api/companies?minArr=100000000&limit=3")}
+                    >
+                      ARR &gt; $100M
+                    </button>
+                  </div>
+                </div>
+
+                <div className="endpoint-input-row">
+                  <span className="http-method-pill">GET</span>
                   <input
-                    className="playground-url-input"
+                    type="text"
+                    className="endpoint-input"
                     value={apiEndpoint}
                     onChange={(e) => setApiEndpoint(e.target.value)}
+                    placeholder="/api/companies?limit=5"
                   />
-                  <button className="btn-primary" onClick={runApiPlayground} disabled={apiLoading}>
-                    {apiLoading ? "Sending..." : "Send Request ⚡"}
+                  <button
+                    type="button"
+                    className="btn-primary btn-send-api"
+                    onClick={runApiPlayground}
+                    disabled={apiLoading}
+                  >
+                    {apiLoading ? "Running..." : "▶ Send Request"}
                   </button>
                 </div>
 
+                {/* API Response Display */}
                 {apiResponse && (
-                  <div className="api-response-viewer">
+                  <div className="api-response-block">
                     <div className="response-header">
-                      <span className="res-badge">HTTP 200 OK</span>
-                      <span className="res-latency">42ms response latency</span>
+                      <div className="response-status">
+                        <span className="status-dot-ok" />
+                        <strong>Status: 200 OK</strong>
+                        {apiLatency && <span className="latency-pill">{apiLatency} ms</span>}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-copy-json"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(JSON.stringify(apiResponse, null, 2));
+                          showToast("Copied JSON response!", "success");
+                        }}
+                      >
+                        Copy JSON
+                      </button>
                     </div>
-                    <pre className="code-snippet json-code">
+                    <pre className="response-json">
                       {JSON.stringify(apiResponse, null, 2)}
                     </pre>
                   </div>
                 )}
               </div>
-
-              <div className="code-example-section">
-                <h3>cURL Shell Example</h3>
-                <pre className="code-snippet">
-{`curl -X GET "https://api.revatlas.com/v1/companies?category=AI&min_revenue=1000000" \\
-  -H "Authorization: Bearer rev_live_948f2b79a103c847e92"`}
-                </pre>
-              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Tab 4: Webhooks & Event Alerts */}
-        {activeTab === "webhooks" && (
-          <div className="tab-pane">
-            <div className="pane-header">
-              <div>
-                <h2>Real-Time SaaS Event Webhooks</h2>
-                <p className="pane-sub">
-                  Receive instant HTTP POST alerts when companies in your watchlist hit revenue milestones or raise new funding.
-                </p>
-              </div>
-            </div>
-
-            <div className="form-card">
-              <div className="form-group">
-                <label>Target Webhook Endpoint URL</label>
-                <div className="webhook-input-row">
-                  <input
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                    placeholder="https://your-crm.com/api/webhooks"
-                  />
-                  <button className="btn-secondary" onClick={testWebhook}>
-                    Send Test Ping
-                  </button>
-                </div>
-                {webhookStatus && <div className="alert-box alert-success">{webhookStatus}</div>}
-              </div>
-
-              <div className="webhook-events-list">
-                <h4>Subscribed Event Triggers:</h4>
-                <label className="checkbox-pill full-mb">
-                  <input type="checkbox" defaultChecked />
-                  <span><b>revenue.milestone_hit</b> (Company reaches $1M, $5M, or $10M ARR)</span>
-                </label>
-                <label className="checkbox-pill full-mb">
-                  <input type="checkbox" defaultChecked />
-                  <span><b>funding.round_announced</b> (Seed, Series A/B funding disclosure)</span>
-                </label>
-                <label className="checkbox-pill full-mb">
-                  <input type="checkbox" defaultChecked />
-                  <span><b>executive.leadership_change</b> (New CEO / Founder appointment)</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 5: Claim / Submit SaaS */}
-        {activeTab === "claim" && (
-          <div className="tab-pane">
-            <div className="pane-header">
-              <div>
-                <h2>Claim or Submit Your SaaS Listing</h2>
-                <p className="pane-sub">
-                  Get your software featured across 72,000+ listings. Verified profiles receive higher trust and direct buyer inbound.
-                </p>
-              </div>
-            </div>
-
-            <div className="form-card">
-              {claimStatus && (
-                <div className={`alert-box ${claimStatus.startsWith("Success") ? "alert-success" : "alert-info"}`}>
-                  {claimStatus}
-                </div>
-              )}
-
-              <form onSubmit={handleClaimSubmit} className="grid-form">
-                <div className="form-group">
-                  <label>SaaS Company Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Acme Cloud"
-                    value={claimForm.name}
-                    onChange={(e) => setClaimForm({ ...claimForm, name: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Website URL *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. acme.com"
-                    value={claimForm.website}
-                    onChange={(e) => setClaimForm({ ...claimForm, website: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Current Annual Recurring Revenue (ARR)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. $1.5M ARR"
-                    value={claimForm.arr}
-                    onChange={(e) => setClaimForm({ ...claimForm, arr: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Total Team Size</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 18"
-                    value={claimForm.team}
-                    onChange={(e) => setClaimForm({ ...claimForm, team: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Total Funding Raised</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Bootstrapped / $750K Angel"
-                    value={claimForm.funding}
-                    onChange={(e) => setClaimForm({ ...claimForm, funding: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Founder / Business Work Email *</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="founder@acme.com"
-                    value={claimForm.founderEmail}
-                    onChange={(e) => setClaimForm({ ...claimForm, founderEmail: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group full-width">
-                  <label>Short Pitch & Key Differentiator</label>
-                  <textarea
-                    rows={3}
-                    placeholder="What problem does your SaaS solve and for whom?"
-                    value={claimForm.note}
-                    onChange={(e) => setClaimForm({ ...claimForm, note: e.target.value })}
-                  ></textarea>
-                </div>
-
-                <div className="form-actions full-width">
-                  <button type="submit" className="btn-primary">
-                    Submit Listing for Free Verification
-                  </button>
-                  <span className="hint-text">Approval takes ~24 hours. No fee required.</span>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 6: Billing & Plan */}
-        {activeTab === "billing" && (
-          <div className="tab-pane">
-            <div className="pane-header">
-              <div>
-                <h2>Subscription & License Management</h2>
-                <p className="pane-sub">Manage your plan, download past invoices, and modify payment methods.</p>
-              </div>
-            </div>
-
-            <div className="billing-summary-card">
-              <div className="bill-plan-info">
+          {/* TAB 4: WEBHOOKS & ALERTS */}
+          {activeTab === "webhooks" && (
+            <div className="dash-tab-content">
+              <div className="dash-section-header">
                 <div>
-                  <span className="badge-pill highlight">Active Plan</span>
-                  <h3>Pro Growth Member ($29 / month)</h3>
-                  <p>Next billing cycle renews on November 24, 2026 via Visa ending in 4242.</p>
+                  <h2 className="dash-section-title">Automated Revenue & Valuation Webhooks</h2>
+                  <p className="dash-section-sub">
+                    Receive real-time HTTP POST notifications when tracked companies hit ARR milestones or close funding rounds.
+                  </p>
                 </div>
-                <div className="btn-group">
-                  <button className="btn-secondary" onClick={() => showToast("Invoice #INV-2026-10 downloaded!", "success")}>
-                    📥 Download Latest Invoice
-                  </button>
-                  <Link href="/pricing" className="btn-primary">
-                    Change Plan
-                  </Link>
+              </div>
+
+              <div className="webhook-card">
+                <div className="form-group">
+                  <label className="form-label">Destination Webhook URL (HTTPS)</label>
+                  <div className="webhook-input-row">
+                    <input
+                      type="url"
+                      className="form-input"
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      placeholder="https://api.yourcrm.com/webhooks/revatlas"
+                    />
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => showToast("Webhook destination URL saved!", "success")}
+                    >
+                      Save URL
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={testWebhook}
+                      disabled={webhookTesting}
+                    >
+                      {webhookTesting ? "Pinging..." : "Test Ping"}
+                    </button>
+                  </div>
+                </div>
+
+                {webhookStatus && (
+                  <div className="webhook-status-alert">
+                    <span>{webhookStatus}</span>
+                  </div>
+                )}
+
+                <div className="webhook-events-section">
+                  <h3 className="events-title">Subscribed Event Triggers</h3>
+                  <div className="events-grid">
+                    <label className="event-checkbox-card">
+                      <input
+                        type="checkbox"
+                        checked={webhookEvents.milestone}
+                        onChange={(e) =>
+                          setWebhookEvents((prev) => ({ ...prev, milestone: e.target.checked }))
+                        }
+                      />
+                      <div>
+                        <strong>company.arr_milestone_crossed</strong>
+                        <p>Fires when a company crosses $1M, $10M, or $50M ARR.</p>
+                      </div>
+                    </label>
+
+                    <label className="event-checkbox-card">
+                      <input
+                        type="checkbox"
+                        checked={webhookEvents.funding}
+                        onChange={(e) =>
+                          setWebhookEvents((prev) => ({ ...prev, funding: e.target.checked }))
+                        }
+                      />
+                      <div>
+                        <strong>company.funding_announced</strong>
+                        <p>Fires when a new Seed, Series A/B, or PE round is detected.</p>
+                      </div>
+                    </label>
+
+                    <label className="event-checkbox-card">
+                      <input
+                        type="checkbox"
+                        checked={webhookEvents.multiple}
+                        onChange={(e) =>
+                          setWebhookEvents((prev) => ({ ...prev, multiple: e.target.checked }))
+                        }
+                      />
+                      <div>
+                        <strong>company.valuation_updated</strong>
+                        <p>Fires when sector median multiple changes benchmark value.</p>
+                      </div>
+                    </label>
+
+                    <label className="event-checkbox-card">
+                      <input
+                        type="checkbox"
+                        checked={webhookEvents.executive}
+                        onChange={(e) =>
+                          setWebhookEvents((prev) => ({ ...prev, executive: e.target.checked }))
+                        }
+                      />
+                      <div>
+                        <strong>company.executive_transition</strong>
+                        <p>Fires when C-suite or founder changes are verified.</p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* TAB 5: CLAIM / SUBMIT SAAS PROFILE */}
+          {activeTab === "claim" && (
+            <div className="dash-tab-content">
+              <div className="dash-section-header">
+                <div>
+                  <h2 className="dash-section-title">Claim & Verify Your SaaS Company</h2>
+                  <p className="dash-section-sub">
+                    Are you the founder or executive of a listed software company? Claim your official profile to edit revenue metrics, badge your page, and receive qualified buyer/investor inquiries.
+                  </p>
+                </div>
+              </div>
+
+              <div className="claim-card">
+                <form onSubmit={handleClaimSubmit} className="claim-form">
+                  <div className="claim-grid-2">
+                    <div className="form-group">
+                      <label className="form-label">SaaS Company Name</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Acme Cloud Inc"
+                        value={claimForm.name}
+                        onChange={(e) => setClaimForm({ ...claimForm, name: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Official Website Domain</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. acme.com"
+                        value={claimForm.website}
+                        onChange={(e) => setClaimForm({ ...claimForm, website: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="claim-grid-3">
+                    <div className="form-group">
+                      <label className="form-label">Current ARR ($USD)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. $4,200,000"
+                        value={claimForm.arr}
+                        onChange={(e) => setClaimForm({ ...claimForm, arr: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Total Team Headcount</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="e.g. 28"
+                        value={claimForm.team}
+                        onChange={(e) => setClaimForm({ ...claimForm, team: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Total Capital Raised</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Bootstrapped or $2.5M"
+                        value={claimForm.funding}
+                        onChange={(e) => setClaimForm({ ...claimForm, funding: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Work Email (Must match company domain)</label>
+                    <input
+                      type="email"
+                      className="form-input"
+                      placeholder="founder@acme.com"
+                      value={claimForm.founderEmail}
+                      onChange={(e) => setClaimForm({ ...claimForm, founderEmail: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Verification Notes / Stripe Snapshot Link (Optional)</label>
+                    <textarea
+                      rows={3}
+                      className="form-input"
+                      placeholder="Provide Stripe billing link, Carta statement, or official press release for fast-track verification..."
+                      value={claimForm.note}
+                      onChange={(e) => setClaimForm({ ...claimForm, note: e.target.value })}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn-primary claim-submit-btn"
+                    disabled={claimSubmitting}
+                  >
+                    {claimSubmitting ? "Submitting Audit Request..." : "Submit Company Claim for Verification →"}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: BILLING & PLAN */}
+          {activeTab === "billing" && (
+            <div className="dash-tab-content">
+              <div className="dash-section-header">
+                <div>
+                  <h2 className="dash-section-title">Subscription & Usage Limits</h2>
+                  <p className="dash-section-sub">
+                    Manage your active plan, lead download credits, and billing receipt invoices.
+                  </p>
+                </div>
+              </div>
+
+              <div className="billing-grid">
+                <div className="billing-plan-card current">
+                  <div className="plan-tag current">ACTIVE TIER</div>
+                  <h3 className="plan-tier-name">RevAtlas Pro</h3>
+                  <div className="plan-tier-price">
+                    <span className="price-num">$29</span>
+                    <span className="price-per">/month</span>
+                  </div>
+                  <ul className="plan-perks-list">
+                    <li>✓ 100 Lead Export Credits per month</li>
+                    <li>✓ Full 72,000+ Verified SaaS balance sheets</li>
+                    <li>✓ 10,000 Programmatic REST API requests / day</li>
+                    <li>✓ Real-time revenue & valuation webhook alerts</li>
+                    <li>✓ Verified founder contact emails</li>
+                  </ul>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-full"
+                    onClick={() => showToast("Opening Stripe billing portal...", "info")}
+                  >
+                    Manage Payment Method (Stripe) ↗
+                  </button>
+                </div>
+
+                <div className="billing-plan-card upgrade">
+                  <div className="plan-tag upgrade">SCALE TEAMS</div>
+                  <h3 className="plan-tier-name">RevAtlas Enterprise</h3>
+                  <div className="plan-tier-price">
+                    <span className="price-num">$99</span>
+                    <span className="price-per">/month</span>
+                  </div>
+                  <ul className="plan-perks-list">
+                    <li>✓ Unlimited monthly lead CSV exports</li>
+                    <li>✓ Unlimited REST API queries with SLA</li>
+                    <li>✓ Custom CRM integration sync (HubSpot, Salesforce)</li>
+                    <li>✓ 5 Team member seats included</li>
+                    <li>✓ Priority 1-on-1 revenue audit support</li>
+                  </ul>
+                  <button
+                    type="button"
+                    className="btn-primary btn-full"
+                    onClick={() => showToast("Upgraded to Enterprise! Invoice generated.", "success")}
+                  >
+                    Upgrade to Enterprise Tier →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
