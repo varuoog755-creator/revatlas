@@ -275,7 +275,7 @@ export default function LandingPage({ data }) {
 
             {/* Floating Hero Visual Showcase Cards */}
             <div className="hero-visual-cards">
-              <div className="hero-card-float card-float-1">
+              <Link href="/company/swipeby" className="hero-card-float card-float-1" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
                 <div className="float-head">
                   <CompanyLogo website="swipe.by" name="SwipeBy" size={32} />
                   <div>
@@ -288,9 +288,9 @@ export default function LandingPage({ data }) {
                   <div>Growth: <b>+66% YoY</b></div>
                   <div>Multiple: <b>9.3x</b></div>
                 </div>
-              </div>
+              </Link>
 
-              <div className="hero-card-float card-float-2">
+              <Link href="/company/froda" className="hero-card-float card-float-2" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
                 <div className="float-head">
                   <CompanyLogo website="froda.se" name="Froda" size={32} />
                   <div>
@@ -303,9 +303,9 @@ export default function LandingPage({ data }) {
                   <div>Valuation: <b>$720M</b></div>
                   <div>Team: <b>118 members</b></div>
                 </div>
-              </div>
+              </Link>
 
-              <div className="hero-card-float card-float-3">
+              <Link href="/company/ahrefs" className="hero-card-float card-float-3" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
                 <div className="float-head">
                   <CompanyLogo website="ahrefs.com" name="Ahrefs" size={32} />
                   <div>
@@ -318,7 +318,7 @@ export default function LandingPage({ data }) {
                   <div>Structure: <b>Bootstrapped</b></div>
                   <div>Multiple: <b>9.0x</b></div>
                 </div>
-              </div>
+              </Link>
             </div>
           </div>
         </section>
@@ -671,22 +671,22 @@ export default function LandingPage({ data }) {
                         {/* Company Name & Link to Profile */}
                         <td>
                           <div className="company-title-cell" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10px" }}>
-                            <CompanyLogo website={r.website} name={r.name} size={30} />
+                            <Link href={`/company/${r.slug}`} style={{ display: "inline-flex", textDecoration: "none" }} title={`View ${r.name} Profile`}>
+                              <CompanyLogo website={r.website} name={r.name} size={30} />
+                            </Link>
                             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                               <Link href={`/company/${r.slug}`} className="cname-link">
                                 <span className="cname">{r.name}</span>
                                 {r.verified && <span className="verified-dot" title="Verified SaaS">✓</span>}
                               </Link>
-                              {r.website && (
-                                <a
-                                  className="site-link"
-                                  href={`https://${r.website}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  {r.website} ↗
-                                </a>
-                              )}
+                              <Link
+                                href={`/company/${r.slug}`}
+                                className="site-link"
+                                style={{ color: "var(--text-dim)", fontSize: "0.78rem" }}
+                                title={`Open ${r.name} Intel & Financials`}
+                              >
+                                {r.website ? `${r.website} · Profile →` : "View Profile →"}
+                              </Link>
                             </div>
                           </div>
                         </td>
