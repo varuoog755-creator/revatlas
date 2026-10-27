@@ -81,28 +81,83 @@ export default function ValuationCalculator({ data }) {
   }, [arr, growthRate, nrr, grossMargin, fundingType, category, data]);
 
   function exportValuationMemo() {
-    const lines = [
-      "RevAtlas Valuation Memo",
-      `Date: ${new Date().toLocaleDateString()}`,
-      `Current ARR: $${arr.toLocaleString()}`,
-      `YoY Growth: ${growthRate}%`,
-      `Net Retention: ${nrr}%`,
-      `Gross Margin: ${grossMargin}%`,
-      `Sector: ${category}`,
-      `Structure: ${fundingType}`,
-      "-------------------------",
-      `Fair Market Valuation: $${calculations.valuation.toLocaleString()}`,
-      `Valuation Multiple: ${calculations.fairMultiple}x ARR`,
-      `Conservative Band: $${calculations.lowVal.toLocaleString()} (${calculations.conservativeMultiple}x)`,
-      `Bull Case Band: $${calculations.highVal.toLocaleString()} (${calculations.optimisticMultiple}x)`,
-      `Rule of 40 Score: ${calculations.ruleOf40}%`,
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `valuation-memo-${Math.round(arr / 1000)}k-arr.txt`;
-    a.click();
-    showToast("Downloaded Valuation Intelligence Memo!", "success");
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      showToast("Pop-up blocked. Please allow pop-ups to open valuation report.", "error");
+      return;
+    }
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>RevAtlas Valuation Memo — ${fmtMoney(calculations.valuation)}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #09090b; max-width: 760px; margin: 0 auto; line-height: 1.5; }
+          .header { border-bottom: 2px solid #09090b; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+          .logo { font-size: 24px; font-weight: 800; }
+          .badge { background: #ecfdf5; color: #047857; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px; }
+          .date { color: #71717a; font-size: 13px; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+          .box { background: #f4f4f5; padding: 20px; border-radius: 8px; }
+          .box-title { font-size: 13px; color: #71717a; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+          .box-val { font-size: 28px; font-weight: 800; font-family: monospace; }
+          .table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+          .table th, .table td { text-align: left; padding: 12px 14px; border-bottom: 1px solid #e4e4e7; font-size: 14px; }
+          .table th { background: #fafafa; font-weight: 600; }
+          .footer { font-size: 12px; color: #a1a1aa; border-top: 1px solid #e4e4e7; padding-top: 15px; margin-top: 40px; text-align: center; }
+          .print-btn { background: #09090b; color: #fff; padding: 10px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; margin-bottom: 20px; }
+          @media print { .print-btn { display: none; } body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <button class="print-btn" onclick="window.print()">🖨 Print or Save as PDF</button>
+        <div class="header">
+          <div>
+            <div class="logo">RevAtlas 🌍 Valuation Memo</div>
+            <div class="date">Generated on ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</div>
+          </div>
+          <span class="badge">Rule of 40: ${calculations.ruleOf40}% (${calculations.ruleOf40 >= 40 ? "Top Quartile" : "Growing"})</span>
+        </div>
+
+        <div class="grid">
+          <div class="box" style="background: #eff6ff; border: 1px solid #bfdbfe;">
+            <div class="box-title" style="color: #1e40af;">Fair Market Enterprise Value</div>
+            <div class="box-val" style="color: #1d4ed8;">${fmtMoney(calculations.valuation)}</div>
+            <div style="font-size: 13px; color: #1e40af; margin-top: 4px;">EV / ARR Multiple: <b>${calculations.fairMultiple}x</b></div>
+          </div>
+          <div class="box">
+            <div class="box-title">Valuation Band Spectrum</div>
+            <div style="font-size: 15px; margin-top: 8px;">Conservative (25th Pct): <b>${fmtMoney(calculations.lowVal)}</b> (${calculations.conservativeMultiple}x)</div>
+            <div style="font-size: 15px; margin-top: 6px;">Bull Case (75th Pct): <b>${fmtMoney(calculations.highVal)}</b> (${calculations.optimisticMultiple}x)</div>
+          </div>
+        </div>
+
+        <h3>Financial Inputs & Efficiency Benchmarks</h3>
+        <table class="table">
+          <tr><th>Input Metric</th><th>Reported Value</th><th>Industry Benchmark Context</th></tr>
+          <tr><td>Annual Recurring Revenue (ARR)</td><td><b>$${arr.toLocaleString()}</b></td><td>Current verified run-rate</td></tr>
+          <tr><td>YoY Revenue Growth</td><td><b>+${growthRate}%</b></td><td>${growthRate >= 60 ? "Hypergrowth SaaS (>60%)" : "Steady expansion"}</td></tr>
+          <tr><td>Net Revenue Retention (NRR)</td><td><b>${nrr}%</b></td><td>${nrr >= 110 ? "Top Quartile Net Expansion" : "Healthy baseline"}</td></tr>
+          <tr><td>Gross Margin</td><td><b>${grossMargin}%</b></td><td>Software gross margin target (75–85%)</td></tr>
+          <tr><td>Capital Architecture</td><td><b>${fundingType === "bootstrapped" ? "Bootstrapped (Profitable)" : "VC Venture Backed"}</b></td><td>${fundingType === "bootstrapped" ? "+1.0x multiple premium for capital efficiency" : "Growth-adjusted valuation"}</td></tr>
+          <tr><td>Primary Market Sector</td><td><b>${category}</b></td><td>Sector-specific EV/ARR transaction multiple</td></tr>
+        </table>
+
+        <h3>RevAtlas Comparable Market Transactions</h3>
+        <table class="table">
+          <tr><th>Comparable Company</th><th>Sector</th><th>ARR</th><th>Valuation Multiple</th></tr>
+          ${calculations.peers.map((p) => `<tr><td><b>${p.name}</b></td><td>${p.category}</td><td>${fmtMoney(p.revenue)}</td><td>${p.multiple}x</td></tr>`).join("")}
+        </table>
+
+        <div class="footer">
+          RevAtlas Intelligence · Derived from 72,000+ verified SaaS balance sheets and SEC private transaction multiples. · https://revatlas-one.vercel.app
+        </div>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    showToast("Opened Executive Valuation Memo (Ready to Print / PDF)!", "success");
   }
 
   return (

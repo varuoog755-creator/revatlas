@@ -62,6 +62,24 @@ export default function CustomerDashboard({ initialData = [] }) {
     note: "",
   });
   const [claimSubmitting, setClaimSubmitting] = useState(false);
+  const [submittedClaims, setSubmittedClaims] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("revatlas_submitted_claims");
+        if (stored) return JSON.parse(stored);
+      } catch (e) {}
+    }
+    return [
+      {
+        ticket: "REV-AUDIT-9281",
+        name: "Acme Cloud Platform",
+        website: "acmecloud.io",
+        arr: "$3.8M",
+        date: "26 Oct 2026",
+        status: "In Review (Stage 2/3: Revenue Verification)",
+      },
+    ];
+  });
 
   // Live API Playground State
   const [apiEndpoint, setApiEndpoint] = useState("/api/companies?limit=3");
@@ -225,8 +243,21 @@ export default function CustomerDashboard({ initialData = [] }) {
     setClaimSubmitting(true);
     setTimeout(() => {
       setClaimSubmitting(false);
+      const newClaim = {
+        ticket: `REV-AUDIT-${Math.floor(1000 + Math.random() * 9000)}`,
+        name: claimForm.name,
+        website: claimForm.website,
+        arr: claimForm.arr || "$1.5M",
+        date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+        status: "Pending Review (Stage 1/3: Domain Ownership)",
+      };
+      const updated = [newClaim, ...submittedClaims];
+      setSubmittedClaims(updated);
+      try {
+        localStorage.setItem("revatlas_submitted_claims", JSON.stringify(updated));
+      } catch (err) {}
       setClaimForm({ name: "", website: "", arr: "", team: "", funding: "", founderEmail: "", note: "" });
-      showToast("Verification request submitted! Our audit team will review your domain within 24 hours.", "success");
+      showToast(`Verification ticket ${newClaim.ticket} created! Audit team will review within 24h.`, "success");
     }, 800);
   }
 
@@ -977,6 +1008,59 @@ export default function CustomerDashboard({ initialData = [] }) {
                     {claimSubmitting ? "Submitting Audit Request..." : "Submit Company Claim for Verification →"}
                   </button>
                 </form>
+              </div>
+
+              {/* Active Verification Requests List */}
+              <div style={{ marginTop: "28px" }}>
+                <h3 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px", color: "var(--text-main)" }}>
+                  Your Verification & Audit Tickets ({submittedClaims.length})
+                </h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {submittedClaims.map((claim) => (
+                    <div
+                      key={claim.ticket}
+                      style={{
+                        background: "var(--bg-surface)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "10px",
+                        padding: "16px 20px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: "12px",
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <b style={{ fontSize: "14px" }}>{claim.name}</b>
+                          <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>({claim.website})</span>
+                          <span className="pill-neutral" style={{ fontSize: "11px", fontFamily: "var(--font-mono)" }}>
+                            {claim.ticket}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                          Reported ARR: <b>{claim.arr}</b> · Submitted on {claim.date}
+                        </div>
+                      </div>
+                      <div>
+                        <span
+                          style={{
+                            background: "var(--gold-bg)",
+                            color: "var(--gold)",
+                            border: "1px solid var(--gold)",
+                            borderRadius: "20px",
+                            padding: "4px 12px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ⏳ {claim.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

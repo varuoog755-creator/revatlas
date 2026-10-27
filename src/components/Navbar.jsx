@@ -45,7 +45,37 @@ export default function Navbar({ savedCount = 0 }) {
     localStorage.setItem("revatlas_theme", nextTheme);
   }
 
-  const searchResults = query.trim()
+  const [dbSearchMatches, setDbSearchMatches] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    if (!query || query.trim().length < 2) {
+      setDbSearchMatches(null);
+      setIsSearching(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(`/api/companies?search=${encodeURIComponent(query.trim())}&limit=8`);
+        const json = await res.json();
+        if (json && Array.isArray(json.data)) {
+          setDbSearchMatches(json.data);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const searchResults = dbSearchMatches !== null
+    ? dbSearchMatches
+    : query.trim()
     ? allData
         .filter(
           (c) =>

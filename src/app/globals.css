@@ -5013,3 +5013,133 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* Compare Tool 72K Search Modal & Pickers */
+.selector-search-trigger {
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.selector-search-trigger:hover {
+  background: var(--accent-blue-light);
+  border-color: var(--accent-blue);
+}
+
+.compare-search-modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-lg);
+  animation: fadeIn 0.15s ease;
+}
+.compare-search-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.compare-search-header .close-btn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.search-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.search-result-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  transform: translateX(2px);
+}
+.search-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.search-item-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.search-item-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.search-item-rev {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent-blue);
+}
+.btn-select {
+  font-size: 12px;
+  color: var(--primary);
+  font-weight: 600;
+}
+.search-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* Mobile Responsiveness for Compare & Directory Table */
+@media (max-width: 860px) {
+  .compare-selectors-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .compare-selectors-bar .vs-badge {
+    align-self: center;
+  }
+  .table-card {
+    border-radius: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .clean-table {
+    min-width: 780px;
+  }
+  .hero-visual-cards {
+    grid-template-columns: 1fr;
+  }
+  .profile-split-row {
+    grid-template-columns: 1fr;
+  }
+  .peers-grid {
+    grid-template-columns: 1fr;
+  }
+  .metrics-ticker-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
